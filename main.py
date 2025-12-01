@@ -12,6 +12,28 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
+# === АНТИ-СПАМ И ЛИМИТЫ ===
+MAX_TITLE_LEN = 100
+MIN_TITLE_LEN = 10
+MAX_DESC_LEN = 2000
+MIN_DESC_LEN = 50
+MAX_SKILLS_LEN = 300
+MIN_SKILLS_LEN = 10
+MAX_EXP_LEN = 1000
+MIN_EXP_LEN = 50
+MAX_PORT_LEN = 1000
+MIN_PORT_LEN = 50
+
+SPAM_WORDS = ["куплю", "продам", "реклама", "спам", "http", "https", "www"]  # Добавь свои слова для блокировки
+
+ORDER_COOLDOWN = 600  # 10 минут в секундах
+PROFILE_COOLDOWN = 1800  # 30 минут в секундах
+
+# Для хранения времени последнего действия
+from datetime import datetime
+user_last_order = {}  # {user_id: timestamp}
+user_last_profile = {}  # {user_id: timestamp}
+
 # === НАСТРОЙКИ ===
 TOKEN = "8410854623:AAFbxvsnACtVNhx90UMQSlnKQJom5jbaa3E"  # Ваш токен
 ADMIN_ID = 0  # если нужен админ — укажите свой TG ID
@@ -177,19 +199,45 @@ async def reg_contact(message: types.Message, state: FSMContext):
 
 @dp.message(RegisterStates.skills)
 async def reg_skills(message: types.Message, state: FSMContext):
-    await state.update_data(skills=message.text.strip())
+    skills = message.text.strip()
+    if len(skills) < MIN_SKILLS_LEN or len(skills) > MAX_SKILLS_LEN:
+        await message.answer(f"Навыки должны быть от {MIN_SKILLS_LEN} до {MAX_SKILLS_LEN} символов!\nТекущее количество: {len(skills)}")
+        return
+    if any(word in skills.lower() for word in SPAM_WORDS):
+        await message.answer("В навыках запрещены рекламные слова и ссылки!")
+        return
+    
+    await state.update_data(skills=skills)
     await message.answer("Опишите опыт работы (лет/проекты):")
     await state.set_state(RegisterStates.experience)
 
+
 @dp.message(RegisterStates.experience)
 async def reg_experience(message: types.Message, state: FSMContext):
-    await state.update_data(experience=message.text.strip())
+    experience = message.text.strip()
+    if len(experience) < MIN_EXP_LEN or len(experience) > MAX_EXP_LEN:
+        await message.answer(f"Опыт должен быть от {MIN_EXP_LEN} до {MAX_EXP_LEN} символов!\nСейчас: {len(experience)}")
+        return
+    if any(word in experience.lower() for word in SPAM_WORDS):
+        await message.answer("В описании опыта запрещены рекламные слова и ссылки!")
+        return
+    
+    await state.update_data(experience=experience)
     await message.answer("Портфолио (ссылки, описание, примеры):")
     await state.set_state(RegisterStates.portfolio)
 
+
 @dp.message(RegisterStates.portfolio)
 async def reg_portfolio(message: types.Message, state: FSMContext):
-    await state.update_data(portfolio=message.text.strip())
+    portfolio = message.text.strip()
+    if len(portfolio) < MIN_PORT_LEN or len(portfolio) > MAX_PORT_LEN:
+        await message.answer(f"Портфолио должно быть от {MIN_PORT_LEN} до {MAX_PORT_LEN} символов!\nСейчас: {len(portfolio)}")
+        return
+    if any(word in portfolio.lower() for word in SPAM_WORDS):
+        await message.answer("В портфолио запрещены рекламные слова и ссылки!")
+        return
+    
+    await state.update_data(portfolio=portfolio)
     await finish_registration(message, state)
 
 async def finish_registration(message: types.Message, state: FSMContext):
@@ -218,41 +266,93 @@ async def finish_registration(message: types.Message, state: FSMContext):
     )
 
 # === ЗАКАЗЧИК: Разместить заказ ===
-@dp.message(F.text == "📝 Разместить заказ")
+@dp.message(F.text == "Разместить заказ")
 async def new_order_start(message: types.Message, state: FSMContext):
-    if get_user(message.from_user.id)[1] != "customer":
+    user_id = message.from_user.id
+    
+    # Проверка роли
+    user = get_user(user_id)
+    if not user or user[1] != "customer":
+        await message.answer("Эта функция доступна только заказчикам.")
         return
-    await message.answer("Введите название заказа:")
+    
+    # Анти-спам: не чаще 1 заказа в 10 минут
+    now = datetime.now().timestamp()
+    if user_id in user_last_order and now - user_last_order[user_id] < ORDER_COOLDOWN:
+        left = int(ORDER_COOLDOWN - (now - user_last_order[user_id]))
+        mins = left // 60
+        secs = left % 60
+        await message.answer(f"Слишком часто! Подождите ещё {mins} мин {secs} сек перед новым заказом.")
+        return
+    
+    user_last_order[user_id] = now
+    
+    await message.answer(
+        f"Создание нового заказа\n\n"
+        f"• Название: 10–100 символов\n"
+        f"• Описание: 50–2000 символов\n"
+        f"• Максимум 5 файлов\n\n"
+        f"Введите название заказа:",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
     await state.set_state(OrderStates.title)
 
 @dp.message(OrderStates.title)
 async def order_title(message: types.Message, state: FSMContext):
-    await state.update_data(title=message.text)
+    title = message.text.strip()
+    if len(title) < MIN_TITLE_LEN or len(title) > MAX_TITLE_LEN:
+        await message.answer(f"Название должно быть от {MIN_TITLE_LEN} до {MAX_TITLE_LEN} символов!")
+        return
+    if any(word in title.lower() for word in SPAM_WORDS):
+        await message.answer("Название содержит запрещённые слова! Попробуй без рекламы.")
+        return
+    await state.update_data(title=title)
     await message.answer("Опишите задачу подробно:")
-    await state.set_state(OrderStates.description)
 
 @dp.message(OrderStates.description)
 async def order_desc(message: types.Message, state: FSMContext):
-    await state.update_data(description=message.text)
+    desc = message.text.strip()
+    if len(desc) < MIN_DESC_LEN or len(desc) > MAX_DESC_LEN:
+        await message.answer(f"Описание должно быть от {MIN_DESC_LEN} до {MAX_DESC_LEN} символов!")
+        return
+    if any(word in desc.lower() for word in SPAM_WORDS):
+        await message.answer("Описание содержит запрещённые слова! Без рекламы и ссылок.")
+        return
+    await state.update_data(description=desc)
     await message.answer("Пришлите файлы (если есть). После всех — нажмите кнопку ниже.", 
                          reply_markup=types.ReplyKeyboardMarkup(keyboard=[[types.KeyboardButton(text="Пропустить файлы")]], resize_keyboard=True))
-    await state.set_state(OrderStates.files)
 
 @dp.message(F.text == "Пропустить файлы")
+async def skip_files(message: types.Message, state: FSMContext):
+    await message.answer("Укажите бюджет (в тенге, только число):", 
+                         reply_markup=types.ReplyKeyboardRemove())
+    await state.set_state(OrderStates.price)
+
+
 @dp.message(OrderStates.files, F.document | F.photo)
 async def order_files(message: types.Message, state: FSMContext):
     data = await state.get_data()
     files = data.get("files", [])
+    
+    # Лимит 5 файлов
+    if len(files) >= 5:
+        await message.answer("⚠️ Максимум 5 файлов на заказ! Нажмите «Пропустить файлы», чтобы продолжить.")
+        return
+    
+    # Добавляем файл
     if message.document:
         files.append(message.document.file_id)
     elif message.photo:
-        files.append(message.photo[-1].file_id)
+        files.append(message.photo[-1].file_id)  # самая чёткая фотка
+    
     await state.update_data(files=files)
-    if message.text != "Пропустить файлы":
-        await message.answer("Файл добавлен. Можете отправить ещё или нажать «Пропустить файлы»")
-        return
-    await message.answer("Укажите бюджет (в тенге, только число):")
-    await state.set_state(OrderStates.price)
+    await message.answer(f"✅ Файл добавлен! Всего: {len(files)} из 5\n\n"
+                         "Пришлите ещё или нажмите кнопку ниже:", 
+                         reply_markup=types.ReplyKeyboardMarkup(
+                             keyboard=[[types.KeyboardButton(text="Пропустить файлы")]], 
+                             resize_keyboard=True
+                         ))
+    # НЕ делаем return — остаёмся в состоянии files
 
 @dp.message(OrderStates.price)
 async def order_price(message: types.Message, state: FSMContext):

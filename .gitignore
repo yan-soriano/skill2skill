@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# VSCode settings
+.vscode/
+
+# IDE
+.idea/
+
+# OS files
+.DS_Store
+
+# Logs
+*.log
+
+# SQLite
+*.db
+
+# Railway
+railway/
