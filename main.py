@@ -51,6 +51,7 @@ os.makedirs(os.path.dirname(DB_NAME), exist_ok=True)
 
 
 def init_db():
+    os.makedirs("data", exist_ok=True)
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
     
