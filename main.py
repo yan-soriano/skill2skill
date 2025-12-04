@@ -320,6 +320,8 @@ async def order_desc(message: types.Message, state: FSMContext):
         await message.answer("Описание содержит запрещённые слова! Без рекламы и ссылок.")
         return
     await state.update_data(description=desc)
+    # Устанавливаем следующее состояние для файлов
+    await state.set_state(OrderStates.files)
     await message.answer("Пришлите файлы (если есть). После всех — нажмите кнопку ниже.", 
                          reply_markup=types.ReplyKeyboardMarkup(keyboard=[[types.KeyboardButton(text="Пропустить файлы")]], resize_keyboard=True))
 
