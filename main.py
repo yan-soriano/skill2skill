@@ -307,6 +307,7 @@ async def order_title(message: types.Message, state: FSMContext):
         await message.answer("Название содержит запрещённые слова! Попробуй без рекламы.")
         return
     await state.update_data(title=title)
+    await state.set_state(OrderStates.description)
     await message.answer("Опишите задачу подробно:")
 
 @dp.message(OrderStates.description)
