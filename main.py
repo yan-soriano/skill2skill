@@ -19,10 +19,10 @@ MAX_DESC_LEN = 2000
 MIN_DESC_LEN = 50
 MAX_SKILLS_LEN = 300
 MIN_SKILLS_LEN = 10
-MAX_EXP_LEN = 1000
-MIN_EXP_LEN = 50
-MAX_PORT_LEN = 1000
-MIN_PORT_LEN = 50
+MAX_EXP_LEN = 500
+MIN_EXP_LEN = 30
+MAX_PORT_LEN = 500
+MIN_PORT_LEN = 10
 
 SPAM_WORDS = ["куплю", "продам", "реклама", "спам", "http", "https", "www"]  # Добавь свои слова для блокировки
 
@@ -44,7 +44,7 @@ dp = Dispatcher(storage=storage)
 logging.basicConfig(level=logging.INFO)
 
 # === БАЗА ДАННЫХ ===
-DB_NAME = "freelance_bot.db"
+DB_NAME = "./data/freelance_bot.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
