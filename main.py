@@ -136,6 +136,13 @@ def complexity_keyboard():
     return types.ReplyKeyboardMarkup(keyboard=[
         [types.KeyboardButton(text="легкий"), types.KeyboardButton(text="средний"), types.KeyboardButton(text="сложный")]
     ], resize_keyboard=True, one_time_keyboard=True)
+def cancel_keyboard():
+    return types.ReplyKeyboardMarkup(
+        keyboard=[[types.KeyboardButton(text="Отмена / Главное меню")]],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+
 
 # === УТИЛИТЫ ===
 def get_user(tg_id: int):
@@ -303,31 +310,74 @@ async def new_order_start(message: types.Message, state: FSMContext):
 
 @dp.message(OrderStates.title)
 async def order_title(message: types.Message, state: FSMContext):
+    # ✅ Проверка кнопки "Отмена / Главное меню"
+    if message.text == "Отмена / Главное меню":
+        await state.clear()  # сброс FSM
+        user = get_user(message.from_user.id)
+        await message.answer("Возврат в главное меню", reply_markup=main_menu(user[1]))
+        return
+
+    # ✅ Проверка длины названия
     title = message.text.strip()
     if len(title) < MIN_TITLE_LEN or len(title) > MAX_TITLE_LEN:
         await message.answer(f"Название должно быть от {MIN_TITLE_LEN} до {MAX_TITLE_LEN} символов!")
         return
+
+    # ✅ Проверка спама
     if any(word in title.lower() for word in SPAM_WORDS):
         await message.answer("Название содержит запрещённые слова! Попробуй без рекламы.")
         return
+
+    # ✅ Сохраняем название и переходим к описанию
     await state.update_data(title=title)
     await state.set_state(OrderStates.description)
-    await message.answer("Опишите задачу подробно:")
+
+    # ✅ Отправляем сообщение с клавиатурой "Отмена / Главное меню"
+    await message.answer(
+        "Опишите задачу подробно:",
+        reply_markup=types.ReplyKeyboardMarkup(
+            keyboard=[[types.KeyboardButton(text="Отмена / Главное меню")]],
+            resize_keyboard=True,
+            one_time_keyboard=True
+        )
+    )
+
 
 @dp.message(OrderStates.description)
 async def order_desc(message: types.Message, state: FSMContext):
+    # ✅ Проверка кнопки "Отмена / Главное меню"
+    if message.text == "Отмена / Главное меню":
+        await state.clear()  # сброс FSM
+        user = get_user(message.from_user.id)
+        await message.answer("Возврат в главное меню", reply_markup=main_menu(user[1]))
+        return
+
+    # ✅ Проверка длины описания
     desc = message.text.strip()
     if len(desc) < MIN_DESC_LEN or len(desc) > MAX_DESC_LEN:
         await message.answer(f"Описание должно быть от {MIN_DESC_LEN} до {MAX_DESC_LEN} символов!")
         return
+
+    # ✅ Проверка спама
     if any(word in desc.lower() for word in SPAM_WORDS):
         await message.answer("Описание содержит запрещённые слова! Без рекламы и ссылок.")
         return
+
+    # ✅ Сохраняем описание и переходим к файлам
     await state.update_data(description=desc)
-    # Устанавливаем следующее состояние для файлов
     await state.set_state(OrderStates.files)
-    await message.answer("Пришлите файлы (если есть). После всех — нажмите кнопку ниже.", 
-                         reply_markup=types.ReplyKeyboardMarkup(keyboard=[[types.KeyboardButton(text="Пропустить файлы")]], resize_keyboard=True))
+
+    # ✅ Сообщение с кнопкой "Пропустить файлы" и кнопкой "Отмена / Главное меню"
+    await message.answer(
+        "Пришлите файлы (если есть). После всех — нажмите кнопку ниже.",
+        reply_markup=types.ReplyKeyboardMarkup(
+            keyboard=[
+                [types.KeyboardButton(text="Пропустить файлы")],
+                [types.KeyboardButton(text="Отмена / Главное меню")]
+            ],
+            resize_keyboard=True
+        )
+    )
 
 @dp.message(F.text == "Пропустить файлы")
 async def skip_files(message: types.Message, state: FSMContext):
@@ -336,45 +386,88 @@ async def skip_files(message: types.Message, state: FSMContext):
     await state.set_state(OrderStates.price)
 
 
-@dp.message(OrderStates.files, F.document | F.photo)
+@dp.message(OrderStates.files, F.document | F.photo | F.text)
 async def order_files(message: types.Message, state: FSMContext):
+    # ✅ Проверка кнопки "Отмена / Главное меню"
+    if message.text == "Отмена / Главное меню":
+        await state.clear()
+        user = get_user(message.from_user.id)
+        await message.answer("Возврат в главное меню", reply_markup=main_menu(user[1]))
+        return
+
+    # ✅ Проверка кнопки "Пропустить файлы"
+    if message.text == "Пропустить файлы":
+        await message.answer("Укажите бюджет (в тенге, только число):", 
+                             reply_markup=types.ReplyKeyboardRemove())
+        await state.set_state(OrderStates.price)
+        return
+
     data = await state.get_data()
     files = data.get("files", [])
-    
+
     # Лимит 5 файлов
     if len(files) >= 5:
-        await message.answer("⚠️ Максимум 5 файлов на заказ! Нажмите «Пропустить файлы», чтобы продолжить.")
+        await message.answer("⚠️ Максимум 5 файлов на заказ! Нажмите «Пропустить файлы» или «Отмена / Главное меню», чтобы продолжить.")
         return
-    
+
     # Добавляем файл
     if message.document:
         files.append(message.document.file_id)
     elif message.photo:
         files.append(message.photo[-1].file_id)  # самая чёткая фотка
-    
+
     await state.update_data(files=files)
-    await message.answer(f"✅ Файл добавлен! Всего: {len(files)} из 5\n\n"
-                         "Пришлите ещё или нажмите кнопку ниже:", 
-                         reply_markup=types.ReplyKeyboardMarkup(
-                             keyboard=[[types.KeyboardButton(text="Пропустить файлы")]], 
-                             resize_keyboard=True
-                         ))
-    # НЕ делаем return — остаёмся в состоянии files
+    await message.answer(
+        f"✅ Файл добавлен! Всего: {len(files)} из 5\n\nПришлите ещё или нажмите кнопку ниже:",
+        reply_markup=types.ReplyKeyboardMarkup(
+            keyboard=[
+                [types.KeyboardButton(text="Пропустить файлы")],
+                [types.KeyboardButton(text="Отмена / Главное меню")]
+            ],
+            resize_keyboard=True
+        )
+    )
 
 @dp.message(OrderStates.price)
 async def order_price(message: types.Message, state: FSMContext):
+    # ✅ Проверка на "Отмена / Главное меню"
+    if message.text == "Отмена / Главное меню":
+        await state.clear()
+        user = get_user(message.from_user.id)
+        await message.answer("Возврат в главное меню", reply_markup=main_menu(user[1]))
+        return
+
     if not message.text.replace('.', '').isdigit():
         await message.answer("Введите число!")
         return
+
     await state.update_data(price=float(message.text))
-    await message.answer("Выберите сложность или я определю автоматически:", reply_markup=complexity_keyboard())
+    await message.answer(
+        "Выберите сложность или я определю автоматически:",
+        reply_markup=types.ReplyKeyboardMarkup(
+            keyboard=[
+                [types.KeyboardButton(text="легкий"), types.KeyboardButton(text="средний"), types.KeyboardButton(text="сложный")],
+                [types.KeyboardButton(text="Отмена / Главное меню")]
+            ],
+            resize_keyboard=True,
+            one_time_keyboard=True
+        )
+    )
     await state.set_state(OrderStates.complexity)
+
 
 @dp.message(OrderStates.complexity)
 async def order_complexity(message: types.Message, state: FSMContext):
+    # ✅ Проверка на "Отмена / Главное меню"
+    if message.text == "Отмена / Главное меню":
+        await state.clear()
+        user = get_user(message.from_user.id)
+        await message.answer("Возврат в главное меню", reply_markup=main_menu(user[1]))
+        return
+
     data = await state.get_data()
     complexity = message.text if message.text in ["легкий","средний","сложный"] else auto_complexity(data["description"])
-    
+
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
     cur.execute('''
@@ -391,9 +484,12 @@ async def order_complexity(message: types.Message, state: FSMContext):
     order_id = cur.lastrowid
     conn.commit()
     conn.close()
-    
+
     await state.clear()
-    await message.answer(f"Заказ #{order_id} опубликован!\nСложность: {complexity}", reply_markup=main_menu("customer"))
+    await message.answer(
+        f"Заказ #{order_id} опубликован!\nСложность: {complexity}",
+        reply_markup=main_menu("customer")
+    )
 
 # === БИРЖА ЗАКАЗОВ ===
 @dp.message(F.text == "📄 Биржа заказов")
