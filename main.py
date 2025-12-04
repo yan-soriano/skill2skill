@@ -297,8 +297,6 @@ async def new_order_start(message: types.Message, state: FSMContext):
         await message.answer(f"Слишком часто! Подождите ещё {mins} мин {secs} сек перед новым заказом.")
         return
     
-    user_last_order[user_id] = now
-    
     await message.answer(
         f"Создание нового заказа\n\n"
         f"• Название: 10–100 символов\n"
@@ -485,6 +483,8 @@ async def order_complexity(message: types.Message, state: FSMContext):
     order_id = cur.lastrowid
     conn.commit()
     conn.close()
+
+    user_last_order[message.from_user.id] = datetime.now().timestamp()
 
     await state.clear()
     await message.answer(
