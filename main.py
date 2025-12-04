@@ -266,7 +266,7 @@ async def finish_registration(message: types.Message, state: FSMContext):
     )
 
 # === ЗАКАЗЧИК: Разместить заказ ===
-@dp.message(F.text == "Разместить заказ")
+@dp.message(F.text == "📝 Разместить заказ")
 async def new_order_start(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     
