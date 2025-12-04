@@ -43,8 +43,12 @@ storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 logging.basicConfig(level=logging.INFO)
 
-# === БАЗА ДАННЫХ ===
-DB_NAME = "./data/freelance_bot.db"
+# Путь к базе
+DB_NAME = os.path.join(os.getcwd(), "data", "freelance_bot.db")
+
+# Создаём папку 'data', если её нет
+os.makedirs(os.path.dirname(DB_NAME), exist_ok=True)
+
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
